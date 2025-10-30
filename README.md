@@ -1,162 +1,117 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hotel Rating App</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hotel Commission App</title>
   <style>
-    body { font-family: Arial; background:#f0f0f0; margin:0; padding:0; }
-    header { background:#0077cc; color:white; padding:20px; text-align:center; }
-    section {
-      margin:20px auto;
-      padding:20px;
-      max-width:600px;
-      background:white;
-      border-radius:10px;
-      box-shadow:0 0 10px rgba(0,0,0,0.2);
-      display: none;
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 0;
+      text-align: center;
     }
-    section.active { display: block; }
-    button {
-      background:#28a745;
-      color:white;
-      border:none;
-      padding:10px 15px;
-      margin:5px 0;
-      border-radius:5px;
-      cursor:pointer;
+    header {
+      background: #0078d7;
+      color: white;
+      padding: 15px 0;
     }
-    input[type="email"] {
-      padding:8px;
-      width:calc(100% - 100px);
-      margin-right:10px;
-      border-radius:5px;
-      border:1px solid #ccc;
-    }
-    .error { color:red; }
     nav {
-      text-align:center;
-      background:white;
-      padding:10px;
-      box-shadow:0 2px 5px rgba(0,0,0,0.1);
+      background: #222;
+      padding: 10px;
     }
     nav a {
-      color:#0077cc;
-      text-decoration:none;
-      margin:0 10px;
-      font-weight:bold;
+      color: white;
+      margin: 0 10px;
+      text-decoration: none;
+      font-weight: bold;
     }
-    nav a:hover { text-decoration:underline; }
+    nav a:hover {
+      text-decoration: underline;
+    }
+    section {
+      padding: 20px;
+    }
+    .btn {
+      display: inline-block;
+      padding: 10px 20px;
+      background: #0078d7;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .btn:hover {
+      background: #005bb5;
+    }
+    input {
+      padding: 10px;
+      width: 250px;
+      margin: 5px 0;
+    }
   </style>
 </head>
 <body>
 
-<header>
-  <h1>💥 Hotel Rating App 💥</h1>
-</header>
+  <header>
+    <h1>Hotel Commission App</h1>
+  </header>
 
-<nav>
-  <a href="#" onclick="showSection('hotel-rating')">🏨 Hotels</a> |
-  <a href="#" onclick="showSection('customer-service')">📞 Support</a> |
-  <a href="#" onclick="showSection('withdrawals')">💰 Withdrawals</a>
-</nav>
+  <nav>
+    <a href="#main">Hotel Ratings</a>
+    <a href="#support">Customer & Finance</a>
+    <a href="#withdrawal">Withdrawal Area</a>
+  </nav>
 
-<!-- ====== SECTION 1: HOTEL RATING ====== -->
-<section id="hotel-rating" class="active">
-  <h2>🏨 Rate Hotels & Earn!</h2>
-  <p>Search for hotels and rate them 5 stars to earn commission.</p>
-  <button id="searchHotelBtn">🔍 Search Hotel</button>
-  <button id="rateHotelBtn">⭐ Rate 5 Stars</button>
-  <p id="commissionEarned">Commission Earned: £0.00</p>
-</section>
+  <section id="main">
+    <h2>Section 1: Hotel Rating Tasks</h2>
+    <p>Search and rate random hotels to earn commissions.</p>
+    <input type="text" id="hotelSearch" placeholder="Search hotel ads..."><br>
+    <button class="btn" onclick="rateHotel()">Rate 5 Stars</button>
+    <p id="ratingStatus"></p>
+  </section>
 
-<!-- ====== SECTION 2: CUSTOMER SERVICE ====== -->
-<section id="customer-service">
-  <h2>📞 Customer Service & Finance</h2>
-  <p>Ask questions about deposits, withdrawals, or reset your work account.</p>
-  <button id="askQuestionBtn">💬 Ask a Question</button>
-  <button id="resetAccountBtn">🔄 Reset Account</button>
-</section>
+  <section id="support">
+    <h2>Section 2: Customer & Finance Department</h2>
+    <p>Ask about deposits, withdrawals, or reset your work account once all 33 tasks are complete.</p>
+    <button class="btn" onclick="resetAccount()">Reset Work Account</button>
+    <p id="resetStatus"></p>
+  </section>
 
-<!-- ====== SECTION 3: WITHDRAWALS ====== -->
-<section id="withdrawals">
-  <h2>💰 Withdrawals</h2>
-  <p>Frozen Balance: £0.00</p>
-  <p class="error" id="withdrawError"></p>
-  <input type="email" id="paypalEmail" placeholder="Enter PayPal Email">
-  <button id="withdrawBtn">💸 Withdraw</button>
-</section>
+  <section id="withdrawal">
+    <h2>Section 3: Withdrawal Area</h2>
+    <p>Frozen balance: £0.00</p>
+    <p>If an error occurred, your balance may display as £0.00.</p>
+    <input type="email" id="paypalEmail" placeholder="Enter PayPal Email"><br>
+    <button class="btn" onclick="withdrawFunds()">Withdraw</button>
+    <p id="withdrawStatus"></p>
+  </section>
 
-<!-- ====== SCRIPT ====== -->
-<script>
-  // ===== Page Navigation =====
-  function showSection(sectionId) {
-    document.querySelectorAll('section').forEach(sec => sec.classList.remove('active'));
-    document.getElementById(sectionId).classList.add('active');
-  }
-
-  // ===== Section 1 =====
-  const hotels = ["Grand Plaza", "Sunny Resort", "Cozy Inn", "Skyline Hotel", "Ocean View"];
-  let commission = 0;
-  const searchHotelBtn = document.getElementById("searchHotelBtn");
-  const rateHotelBtn = document.getElementById("rateHotelBtn");
-  const commissionEarned = document.getElementById("commissionEarned");
-  let currentHotel = "";
-
-  searchHotelBtn.addEventListener("click", () => {
-    currentHotel = hotels[Math.floor(Math.random() * hotels.length)];
-    alert(`🏨 Found hotel: ${currentHotel}`);
-  });
-
-  rateHotelBtn.addEventListener("click", () => {
-    if (!currentHotel) {
-      alert("⚠️ Search a hotel first!");
-      return;
+  <script>
+    function rateHotel() {
+      const hotel = document.getElementById('hotelSearch').value;
+      if (hotel.trim() === '') {
+        document.getElementById('ratingStatus').textContent = 'Please enter a hotel name before rating.';
+      } else {
+        document.getElementById('ratingStatus').textContent = 'You rated ' + hotel + ' 5 stars. Commission earned.';
+      }
     }
-    commission += 5;
-    commissionEarned.textContent = `Commission Earned: £${commission}.00`;
-    alert(`⭐ You rated ${currentHotel} 5 stars! +£5 commission`);
-    currentHotel = "";
-  });
 
-  // ===== Section 2 =====
-  const askQuestionBtn = document.getElementById("askQuestionBtn");
-  const resetAccountBtn = document.getElementById("resetAccountBtn");
-
-  askQuestionBtn.addEventListener("click", () => {
-    const question = prompt("💬 Enter your question about deposits, withdrawals, or account reset:");
-    if (question) alert("✅ Your question has been submitted!");
-  });
-
-  resetAccountBtn.addEventListener("click", () => {
-    if (confirm("⚠️ Are you sure you want to reset your account? This will clear all progress.")) {
-      commission = 0;
-      commissionEarned.textContent = `Commission Earned: £0.00`;
-      alert("🔄 Your account has been reset!");
+    function resetAccount() {
+      document.getElementById('resetStatus').textContent = 'Your account has been reset for a new set of 33 tasks.';
     }
-  });
 
-  // ===== Section 3 =====
-  const withdrawBtn = document.getElementById("withdrawBtn");
-  const paypalEmail = document.getElementById("paypalEmail");
-  const withdrawError = document.getElementById("withdrawError");
-
-  withdrawBtn.addEventListener("click", () => {
-    if (commission === 0) {
-      withdrawError.textContent = "⚠️ No funds to withdraw!";
-      return;
+    function withdrawFunds() {
+      const email = document.getElementById('paypalEmail').value;
+      if (email.trim() === '') {
+        document.getElementById('withdrawStatus').textContent = 'Please enter your PayPal email.';
+      } else {
+        document.getElementById('withdrawStatus').textContent = 'Withdrawal request sent to ' + email + '.';
+      }
     }
-    if (!paypalEmail.value) {
-      withdrawError.textContent = "⚠️ Enter a valid PayPal email!";
-      return;
-    }
-    alert(`💸 £${commission}.00 has been sent to ${paypalEmail.value}!`);
-    commission = 0;
-    commissionEarned.textContent = `Commission Earned: £0.00`;
-    withdrawError.textContent = "";
-    paypalEmail.value = "";
-  });
-</script>
+  </script>
 
 </body>
 </html>
