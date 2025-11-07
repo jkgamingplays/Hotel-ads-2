@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Wallet, Lock, ArrowUpRight, Loader2, Clock, Settings } from "lucide-react"
+import { Wallet, Lock, ArrowUpRight, Loader2, Clock } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface ProfileSectionProps {
@@ -30,8 +30,12 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingWithdrawals, setPendingWithdrawals] = useState<PendingWithdrawal[]>([])
   const [showSettings, setShowSettings] = useState(false)
-  const [paypalClientId, setPaypalClientId] = useState("")
-  const [paypalClientSecret, setPaypalClientSecret] = useState("")
+  const [paypalClientId, setPaypalClientId] = useState(
+    "AdWFWkjs4dze88rLaizHdQgKIL7PqpKr87dfbtuPla_hMwGdqnW3_1HzEEsn-LywJekj4VGA29sw7PS1",
+  )
+  const [paypalClientSecret, setPaypalClientSecret] = useState(
+    "EAoBYxw0Oo0Y8wQ0teD2zytUR2f2M_RgpCEJRE7CRSOjKiGKnhOHsm3RXmkgNGBRtO9HkIzCUth0lWLE",
+  )
   const { toast } = useToast()
 
   useEffect(() => {
@@ -51,8 +55,16 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
       storedClientSecret ? storedClientSecret.substring(0, 15) + "..." : "Not found",
     )
 
-    if (storedClientId) setPaypalClientId(storedClientId)
-    if (storedClientSecret) setPaypalClientSecret(storedClientSecret)
+    if (!storedClientId) {
+      localStorage.setItem(
+        "paypal_client_id",
+        "AdWFWkjs4dze88rLaizHdQgKIL7PqpKr87dfbtuPla_hMwGdqnW3_1HzEEsn-LywJekj4VGA29sw7PS1",
+      )
+      localStorage.setItem(
+        "paypal_client_secret",
+        "EAoBYxw0Oo0Y8wQ0teD2zytUR2f2M_RgpCEJRE7CRSOjKiGKnhOHsm3RXmkgNGBRtO9HkIzCUth0lWLE",
+      )
+    }
   }, [])
 
   useEffect(() => {
@@ -61,54 +73,8 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
     }
   }, [pendingWithdrawals])
 
-  const saveCredentials = () => {
-    if (!paypalClientId || !paypalClientSecret) {
-      toast({
-        title: "Error",
-        description: "Please enter both Client ID and Client Secret.",
-        variant: "destructive",
-      })
-      return
-    }
-    const trimmedId = paypalClientId.trim()
-    const trimmedSecret = paypalClientSecret.trim()
-
-    console.log("[v0] Saving Client ID:", trimmedId.substring(0, 15) + "...")
-    console.log("[v0] Saving Client Secret:", trimmedSecret.substring(0, 15) + "...")
-
-    localStorage.setItem("paypal_client_id", trimmedId)
-    localStorage.setItem("paypal_client_secret", trimmedSecret)
-    toast({
-      title: "Credentials Saved",
-      description: "Your PayPal API credentials have been saved securely.",
-    })
-    setShowSettings(false)
-  }
-
-  const clearCredentials = () => {
-    localStorage.removeItem("paypal_client_id")
-    localStorage.removeItem("paypal_client_secret")
-    setPaypalClientId("")
-    setPaypalClientSecret("")
-    console.log("[v0] Credentials cleared from localStorage")
-    toast({
-      title: "Credentials Cleared",
-      description: "Please enter your correct PayPal API credentials.",
-    })
-  }
-
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!paypalClientId || !paypalClientSecret) {
-      toast({
-        title: "Configure PayPal",
-        description: "Please configure your PayPal API credentials first.",
-        variant: "destructive",
-      })
-      setShowSettings(true)
-      return
-    }
 
     const withdrawValue = Number.parseFloat(withdrawAmount)
 
@@ -226,83 +192,6 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>PayPal API Configuration</CardTitle>
-              <CardDescription>Configure your PayPal REST API credentials</CardDescription>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setShowSettings(!showSettings)}>
-              <Settings className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        {showSettings && (
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="clientId">PayPal Client ID</Label>
-              <Input
-                id="clientId"
-                type="text"
-                placeholder="AXfCfbM8s_1w_kI08JBsnMPO..."
-                value={paypalClientId}
-                onChange={(e) => setPaypalClientId(e.target.value)}
-              />
-              {paypalClientId && (
-                <p className="text-xs text-muted-foreground">Current: {paypalClientId.substring(0, 20)}...</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="clientSecret">PayPal Client Secret</Label>
-              <Input
-                id="clientSecret"
-                type="password"
-                placeholder="EJx-iXiPxAuyNMIhp6wltO..."
-                value={paypalClientSecret}
-                onChange={(e) => setPaypalClientSecret(e.target.value)}
-              />
-              {paypalClientSecret && (
-                <p className="text-xs text-muted-foreground">Current: {paypalClientSecret.substring(0, 20)}...</p>
-              )}
-            </div>
-
-            <div className="flex gap-2">
-              <Button onClick={saveCredentials} className="flex-1">
-                Save Credentials
-              </Button>
-              <Button onClick={clearCredentials} variant="outline" className="flex-1 bg-transparent">
-                Clear & Reset
-              </Button>
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              Get your credentials from:{" "}
-              <a
-                href="https://developer.paypal.com/dashboard/applications/live"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary underline"
-              >
-                PayPal Developer Dashboard
-              </a>
-            </p>
-          </CardContent>
-        )}
-        {!showSettings && (
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Status:{" "}
-              <span className={paypalClientId ? "text-accent-green font-medium" : "text-red-500 font-medium"}>
-                {paypalClientId ? "Configured" : "Not Configured"}
-              </span>
-              {paypalClientId && <span className="ml-2 text-xs">({paypalClientId.substring(0, 15)}...)</span>}
-            </p>
-          </CardContent>
-        )}
-      </Card>
-
       {pendingWithdrawals.length > 0 && (
         <Card>
           <CardHeader>
@@ -337,7 +226,7 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
       <Card>
         <CardHeader>
           <CardTitle>Withdrawal</CardTitle>
-          <CardDescription>Transfer funds to your PayPal account</CardDescription>
+          <CardDescription>Transfer funds to your PayPal account instantly</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleWithdraw} className="space-y-4">
@@ -377,7 +266,7 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
               ) : (
                 <>
                   <ArrowUpRight className="mr-2 h-4 w-4" />
-                  Request Withdrawal
+                  Withdraw to PayPal
                 </>
               )}
             </Button>
