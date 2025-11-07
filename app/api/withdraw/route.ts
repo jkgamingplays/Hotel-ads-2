@@ -9,8 +9,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    const clientId = process.env.PAYPAL_CLIENT_ID || process.env.client_ID || process.env.Client_ID
+    const clientId =
+      process.env.PAYPAL_CLIENT_ID ||
+      process.env.PAYPAl_CLIENT_ID || // Typo version
+      process.env.client_ID ||
+      process.env.Client_ID
     const clientSecret = process.env.PAYPAL_CLIENT_SECRET || process.env.Client_Secret || process.env.client_Secret
+
+    console.log("[v0] Client ID found:", clientId ? `${clientId.substring(0, 10)}...` : "MISSING")
+    console.log("[v0] Client Secret found:", clientSecret ? "YES" : "MISSING")
 
     if (!clientId || !clientSecret) {
       console.error("[v0] PayPal credentials not configured")
@@ -31,7 +38,7 @@ export async function POST(request: Request) {
     console.log("[v0] Amount:", amount, "GBP")
     console.log("[v0] Recipient:", paypalEmail)
 
-    const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64")
+    const auth = Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString("base64")
 
     const tokenResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
       method: "POST",
@@ -46,7 +53,10 @@ export async function POST(request: Request) {
       const errorText = await tokenResponse.text()
       console.error("[v0] PayPal authentication failed:", errorText)
       return NextResponse.json(
-        { error: "PayPal authentication failed. Please check your credentials." },
+        {
+          error: "PayPal authentication failed. Your credentials may be incorrect or expired.",
+          details: "Please verify your Client ID and Secret in the environment variables.",
+        },
         { status: 401 },
       )
     }
