@@ -41,6 +41,16 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
     }
     const storedClientId = localStorage.getItem("paypal_client_id")
     const storedClientSecret = localStorage.getItem("paypal_client_secret")
+
+    console.log(
+      "[v0] Loaded Client ID from storage:",
+      storedClientId ? storedClientId.substring(0, 15) + "..." : "Not found",
+    )
+    console.log(
+      "[v0] Loaded Client Secret from storage:",
+      storedClientSecret ? storedClientSecret.substring(0, 15) + "..." : "Not found",
+    )
+
     if (storedClientId) setPaypalClientId(storedClientId)
     if (storedClientSecret) setPaypalClientSecret(storedClientSecret)
   }, [])
@@ -60,13 +70,31 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
       })
       return
     }
-    localStorage.setItem("paypal_client_id", paypalClientId.trim())
-    localStorage.setItem("paypal_client_secret", paypalClientSecret.trim())
+    const trimmedId = paypalClientId.trim()
+    const trimmedSecret = paypalClientSecret.trim()
+
+    console.log("[v0] Saving Client ID:", trimmedId.substring(0, 15) + "...")
+    console.log("[v0] Saving Client Secret:", trimmedSecret.substring(0, 15) + "...")
+
+    localStorage.setItem("paypal_client_id", trimmedId)
+    localStorage.setItem("paypal_client_secret", trimmedSecret)
     toast({
       title: "Credentials Saved",
       description: "Your PayPal API credentials have been saved securely.",
     })
     setShowSettings(false)
+  }
+
+  const clearCredentials = () => {
+    localStorage.removeItem("paypal_client_id")
+    localStorage.removeItem("paypal_client_secret")
+    setPaypalClientId("")
+    setPaypalClientSecret("")
+    console.log("[v0] Credentials cleared from localStorage")
+    toast({
+      title: "Credentials Cleared",
+      description: "Please enter your correct PayPal API credentials.",
+    })
   }
 
   const handleWithdraw = async (e: React.FormEvent) => {
@@ -79,15 +107,6 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
         variant: "destructive",
       })
       setShowSettings(true)
-      return
-    }
-
-    if (!paypalAccount) {
-      toast({
-        title: "Error",
-        description: "Please enter your PayPal account details.",
-        variant: "destructive",
-      })
       return
     }
 
@@ -123,6 +142,10 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
     setIsProcessing(true)
 
     try {
+      console.log("[v0] Sending withdrawal with Client ID:", paypalClientId.substring(0, 15) + "...")
+      console.log("[v0] PayPal Email:", paypalAccount)
+      console.log("[v0] Amount:", withdrawValue)
+
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 30000)
 
@@ -154,6 +177,7 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
         setWithdrawAmount("")
         setPaypalAccount("")
       } else {
+        console.error("[v0] Withdrawal failed:", data)
         toast({
           title: "Withdrawal Failed",
           description: data.error || "An error occurred. Please try again.",
@@ -225,6 +249,9 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
                 value={paypalClientId}
                 onChange={(e) => setPaypalClientId(e.target.value)}
               />
+              {paypalClientId && (
+                <p className="text-xs text-muted-foreground">Current: {paypalClientId.substring(0, 20)}...</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -236,11 +263,19 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
                 value={paypalClientSecret}
                 onChange={(e) => setPaypalClientSecret(e.target.value)}
               />
+              {paypalClientSecret && (
+                <p className="text-xs text-muted-foreground">Current: {paypalClientSecret.substring(0, 20)}...</p>
+              )}
             </div>
 
-            <Button onClick={saveCredentials} className="w-full">
-              Save Credentials
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={saveCredentials} className="flex-1">
+                Save Credentials
+              </Button>
+              <Button onClick={clearCredentials} variant="outline" className="flex-1 bg-transparent">
+                Clear & Reset
+              </Button>
+            </div>
 
             <p className="text-xs text-muted-foreground">
               Get your credentials from:{" "}
@@ -262,6 +297,7 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
               <span className={paypalClientId ? "text-accent-green font-medium" : "text-red-500 font-medium"}>
                 {paypalClientId ? "Configured" : "Not Configured"}
               </span>
+              {paypalClientId && <span className="ml-2 text-xs">({paypalClientId.substring(0, 15)}...)</span>}
             </p>
           </CardContent>
         )}
