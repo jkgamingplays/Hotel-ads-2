@@ -14,8 +14,20 @@ export async function POST(request: Request) {
     const paypalClientSecret =
       clientSecret?.trim() || "EAoBYxw0Oo0Y8wQ0teD2zytUR2f2M_RgpCEJRE7CRSOjKiGKnhOHsm3RXmkgNGBRtO9HkIzCUth0lWLE"
 
-    const isSandbox = paypalClientId.startsWith("AZa") || paypalClientId.startsWith("Aca")
+    // More comprehensive sandbox detection
+    const isSandbox =
+      paypalClientId.startsWith("AZa") ||
+      paypalClientId.startsWith("Aca") ||
+      paypalClientId.startsWith("AdW") ||
+      paypalClientId.startsWith("Adx") ||
+      paypalEmail.includes("sandbox") ||
+      paypalEmail.includes("@business.example.com")
+
     const baseUrl = isSandbox ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com"
+
+    console.log(`[v0] PayPal Environment: ${isSandbox ? "SANDBOX" : "LIVE"}`)
+    console.log(`[v0] Using endpoint: ${baseUrl}`)
+    console.log(`[v0] Client ID starts with: ${paypalClientId.substring(0, 10)}...`)
 
     const auth = Buffer.from(`${paypalClientId}:${paypalClientSecret}`).toString("base64")
 
@@ -33,16 +45,25 @@ export async function POST(request: Request) {
 
     if (!tokenResponse.ok) {
       const tokenText = await tokenResponse.text()
+      console.error(`[v0] Token request failed:`, tokenText)
+
       return NextResponse.json(
         {
-          error: "PayPal authentication failed. Please verify your credentials are correct.",
-          details: tokenText,
+          error: `PayPal authentication failed (${isSandbox ? "Sandbox" : "Live"} environment)`,
+          details:
+            "Possible issues:\n" +
+            "1. Credentials may be for a different environment (Sandbox vs Live)\n" +
+            "2. Check your PayPal Developer Dashboard for correct credentials\n" +
+            "3. Ensure credentials are REST API credentials (not NVP/SOAP)\n" +
+            `4. Current environment detected as: ${isSandbox ? "SANDBOX" : "LIVE"}\n\n` +
+            `Technical details: ${tokenText}`,
         },
         { status: 401 },
       )
     }
 
     const tokenData = await tokenResponse.json()
+    console.log(`[v0] Access token obtained successfully`)
 
     // Step 2: Create payout
     const batchId = `batch_${Date.now()}_${Math.random().toString(36).substring(7)}`
@@ -118,6 +139,7 @@ export async function POST(request: Request) {
       message: `£${amount} sent to ${paypalEmail}`,
     })
   } catch (error) {
+    console.error(`[v0] Unexpected error:`, error)
     return NextResponse.json({ error: "An unexpected error occurred. Please try again." }, { status: 500 })
   }
 }
