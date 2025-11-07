@@ -9,60 +9,94 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    const clientId =
-      process.env.PAYPAL_CLIENT_ID ||
-      process.env.PAYPAl_CLIENT_ID || // Typo version
-      process.env.client_ID ||
-      process.env.Client_ID
-    const clientSecret = process.env.PAYPAL_CLIENT_SECRET || process.env.Client_Secret || process.env.client_Secret
+    const clientIdOptions = {
+      PAYPAL_CLIENT_ID: process.env.PAYPAL_CLIENT_ID,
+      PAYPAl_CLIENT_ID: process.env.PAYPAl_CLIENT_ID,
+      client_ID: process.env.client_ID,
+      Client_ID: process.env.Client_ID,
+    }
 
-    console.log("[v0] Client ID found:", clientId ? `${clientId.substring(0, 10)}...` : "MISSING")
-    console.log("[v0] Client Secret found:", clientSecret ? "YES" : "MISSING")
+    const clientSecretOptions = {
+      PAYPAL_CLIENT_SECRET: process.env.PAYPAL_CLIENT_SECRET,
+      Client_Secret: process.env.Client_Secret,
+      client_Secret: process.env.client_Secret,
+      PAYPAL_SECRET: process.env.PAYPAL_SECRET,
+    }
+
+    console.log("[v0] Available Client ID variables:")
+    Object.entries(clientIdOptions).forEach(([key, value]) => {
+      console.log(`  ${key}: ${value ? `${value.substring(0, 15)}...` : "NOT SET"}`)
+    })
+
+    console.log("[v0] Available Client Secret variables:")
+    Object.entries(clientSecretOptions).forEach(([key, value]) => {
+      console.log(`  ${key}: ${value ? "SET" : "NOT SET"}`)
+    })
+
+    // Get the first available credential
+    const clientId = Object.values(clientIdOptions)
+      .find((v) => v)
+      ?.trim()
+    const clientSecret = Object.values(clientSecretOptions)
+      .find((v) => v)
+      ?.trim()
 
     if (!clientId || !clientSecret) {
       console.error("[v0] PayPal credentials not configured")
       return NextResponse.json(
         {
           error:
-            "PayPal credentials not configured. Please add PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET to environment variables.",
+            "PayPal credentials not found in environment variables. Please add them with one of these names: PAYPAL_CLIENT_ID, client_ID",
         },
         { status: 500 },
       )
     }
+
+    console.log("[v0] Using Client ID:", clientId.substring(0, 20) + "...")
+    console.log("[v0] Using Client Secret:", clientSecret.substring(0, 10) + "...")
 
     const isSandbox = clientId.includes("sandbox") || clientId.startsWith("AZa") || clientId.startsWith("Aca")
     const baseUrl = isSandbox ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com"
 
     console.log("[v0] ===== PayPal Instant Payout =====")
     console.log("[v0] Environment:", isSandbox ? "SANDBOX" : "LIVE")
+    console.log("[v0] Base URL:", baseUrl)
     console.log("[v0] Amount:", amount, "GBP")
     console.log("[v0] Recipient:", paypalEmail)
 
-    const auth = Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString("base64")
+    const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64")
+    console.log("[v0] Auth header length:", auth.length)
 
     const tokenResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
       method: "POST",
       headers: {
         Authorization: `Basic ${auth}`,
         "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+        "Accept-Language": "en_US",
       },
       body: "grant_type=client_credentials",
     })
 
+    const tokenText = await tokenResponse.text()
+    console.log("[v0] Token response status:", tokenResponse.status)
+    console.log("[v0] Token response:", tokenText.substring(0, 200))
+
     if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text()
-      console.error("[v0] PayPal authentication failed:", errorText)
+      console.error("[v0] ❌ PayPal authentication failed")
       return NextResponse.json(
         {
-          error: "PayPal authentication failed. Your credentials may be incorrect or expired.",
-          details: "Please verify your Client ID and Secret in the environment variables.",
+          error: "PayPal authentication failed",
+          details:
+            "Please verify:\n1. Your credentials are REST API credentials (not NVP/SOAP)\n2. Client ID and Secret are correct\n3. No extra spaces in the credentials\n4. Credentials match the environment (Live/Sandbox)",
+          response: tokenText,
         },
         { status: 401 },
       )
     }
 
-    const tokenData = await tokenResponse.json()
-    console.log("[v0] ✓ Authenticated with PayPal")
+    const tokenData = JSON.parse(tokenText)
+    console.log("[v0] ✓ Successfully authenticated with PayPal")
 
     const requestId = `payout_${Date.now()}_${Math.random().toString(36).substring(7)}`
     const batchId = `batch_${Date.now()}`
