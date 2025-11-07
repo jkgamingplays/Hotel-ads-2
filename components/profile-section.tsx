@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Wallet, Lock, ArrowUpRight, Loader2, Clock } from "lucide-react"
+import { Wallet, Lock, ArrowUpRight, Loader2, Clock, Settings } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface ProfileSectionProps {
@@ -29,6 +29,9 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
   const [withdrawAmount, setWithdrawAmount] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingWithdrawals, setPendingWithdrawals] = useState<PendingWithdrawal[]>([])
+  const [showSettings, setShowSettings] = useState(false)
+  const [paypalClientId, setPaypalClientId] = useState("")
+  const [paypalClientSecret, setPaypalClientSecret] = useState("")
   const { toast } = useToast()
 
   useEffect(() => {
@@ -36,6 +39,10 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
     if (stored) {
       setPendingWithdrawals(JSON.parse(stored))
     }
+    const storedClientId = localStorage.getItem("paypal_client_id")
+    const storedClientSecret = localStorage.getItem("paypal_client_secret")
+    if (storedClientId) setPaypalClientId(storedClientId)
+    if (storedClientSecret) setPaypalClientSecret(storedClientSecret)
   }, [])
 
   useEffect(() => {
@@ -44,8 +51,36 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
     }
   }, [pendingWithdrawals])
 
+  const saveCredentials = () => {
+    if (!paypalClientId || !paypalClientSecret) {
+      toast({
+        title: "Error",
+        description: "Please enter both Client ID and Client Secret.",
+        variant: "destructive",
+      })
+      return
+    }
+    localStorage.setItem("paypal_client_id", paypalClientId.trim())
+    localStorage.setItem("paypal_client_secret", paypalClientSecret.trim())
+    toast({
+      title: "Credentials Saved",
+      description: "Your PayPal API credentials have been saved securely.",
+    })
+    setShowSettings(false)
+  }
+
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!paypalClientId || !paypalClientSecret) {
+      toast({
+        title: "Configure PayPal",
+        description: "Please configure your PayPal API credentials first.",
+        variant: "destructive",
+      })
+      setShowSettings(true)
+      return
+    }
 
     if (!paypalAccount) {
       toast({
@@ -88,69 +123,43 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
     setIsProcessing(true)
 
     try {
-      const withdrawalId = `WD-${Date.now()}`
-      const newWithdrawal: PendingWithdrawal = {
-        id: withdrawalId,
-        amount: withdrawValue,
-        paypalEmail: paypalAccount,
-        date: new Date().toISOString(),
-        status: "processing",
-      }
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000)
 
-      setPendingWithdrawals((prev) => [...prev, newWithdrawal])
+      const response = await fetch("/api/withdraw", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          paypalEmail: paypalAccount,
+          amount: withdrawValue,
+          clientId: paypalClientId,
+          clientSecret: paypalClientSecret,
+        }),
+        signal: controller.signal,
+      })
 
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 15000)
+      clearTimeout(timeoutId)
+      const data = await response.json()
 
-        const response = await fetch("/api/withdraw", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            paypalEmail: paypalAccount,
-            amount: withdrawValue,
-          }),
-          signal: controller.signal,
-        })
+      if (response.ok && data.success) {
+        setBalance((prev) => prev - withdrawValue)
 
-        clearTimeout(timeoutId)
-        const data = await response.json()
-
-        if (response.ok && data.success) {
-          setBalance((prev) => prev - withdrawValue)
-          setPendingWithdrawals((prev) =>
-            prev.map((w) => (w.id === withdrawalId ? { ...w, status: "pending" as const } : w)),
-          )
-
-          if (data.requiresManualProcessing) {
-            toast({
-              title: "Withdrawal Submitted",
-              description: `Your withdrawal of £${withdrawValue.toFixed(2)} has been submitted and will be processed manually within 24-48 hours.`,
-            })
-          } else {
-            toast({
-              title: "Withdrawal Successful",
-              description: `£${withdrawValue.toFixed(2)} has been sent to ${paypalAccount}. ${data.batchId ? `Batch ID: ${data.batchId}` : ""}`,
-            })
-          }
-        } else {
-          toast({
-            title: "Withdrawal Submitted",
-            description: `Your withdrawal of £${withdrawValue.toFixed(2)} has been submitted and will be processed shortly.`,
-          })
-        }
-      } catch (apiError) {
-        console.log("[v0] API request failed, withdrawal queued locally")
         toast({
-          title: "Withdrawal Queued",
-          description: `Your withdrawal of £${withdrawValue.toFixed(2)} has been queued and will be processed shortly.`,
+          title: "Withdrawal Successful",
+          description: `£${withdrawValue.toFixed(2)} has been sent to ${paypalAccount}. ${data.batchId ? `Batch ID: ${data.batchId}` : ""}`,
+        })
+
+        setWithdrawAmount("")
+        setPaypalAccount("")
+      } else {
+        toast({
+          title: "Withdrawal Failed",
+          description: data.error || "An error occurred. Please try again.",
+          variant: "destructive",
         })
       }
-
-      setWithdrawAmount("")
-      setPaypalAccount("")
     } catch (error) {
       console.error("[v0] Withdrawal error:", error)
       toast({
@@ -191,6 +200,71 @@ export function ProfileSection({ balance, frozenBalance, setBalance }: ProfileSe
             </div>
           </div>
         </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>PayPal API Configuration</CardTitle>
+              <CardDescription>Configure your PayPal REST API credentials</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setShowSettings(!showSettings)}>
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        {showSettings && (
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="clientId">PayPal Client ID</Label>
+              <Input
+                id="clientId"
+                type="text"
+                placeholder="AXfCfbM8s_1w_kI08JBsnMPO..."
+                value={paypalClientId}
+                onChange={(e) => setPaypalClientId(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="clientSecret">PayPal Client Secret</Label>
+              <Input
+                id="clientSecret"
+                type="password"
+                placeholder="EJx-iXiPxAuyNMIhp6wltO..."
+                value={paypalClientSecret}
+                onChange={(e) => setPaypalClientSecret(e.target.value)}
+              />
+            </div>
+
+            <Button onClick={saveCredentials} className="w-full">
+              Save Credentials
+            </Button>
+
+            <p className="text-xs text-muted-foreground">
+              Get your credentials from:{" "}
+              <a
+                href="https://developer.paypal.com/dashboard/applications/live"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                PayPal Developer Dashboard
+              </a>
+            </p>
+          </CardContent>
+        )}
+        {!showSettings && (
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Status:{" "}
+              <span className={paypalClientId ? "text-accent-green font-medium" : "text-red-500 font-medium"}>
+                {paypalClientId ? "Configured" : "Not Configured"}
+              </span>
+            </p>
+          </CardContent>
+        )}
       </Card>
 
       {pendingWithdrawals.length > 0 && (

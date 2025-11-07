@@ -3,70 +3,36 @@ import { NextResponse } from "next/server"
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { paypalEmail, amount } = body
+    const { paypalEmail, amount, clientId, clientSecret } = body
 
     if (!paypalEmail || !amount) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    const clientIdOptions = {
-      PAYPAL_CLIENT_ID: process.env.PAYPAL_CLIENT_ID,
-      PAYPAl_CLIENT_ID: process.env.PAYPAl_CLIENT_ID,
-      client_ID: process.env.client_ID,
-      Client_ID: process.env.Client_ID,
-    }
-
-    const clientSecretOptions = {
-      PAYPAL_CLIENT_SECRET: process.env.PAYPAL_CLIENT_SECRET,
-      Client_Secret: process.env.Client_Secret,
-      client_Secret: process.env.client_Secret,
-      PAYPAL_SECRET: process.env.PAYPAL_SECRET,
-    }
-
-    console.log("[v0] Available Client ID variables:")
-    Object.entries(clientIdOptions).forEach(([key, value]) => {
-      console.log(`  ${key}: ${value ? `${value.substring(0, 15)}...` : "NOT SET"}`)
-    })
-
-    console.log("[v0] Available Client Secret variables:")
-    Object.entries(clientSecretOptions).forEach(([key, value]) => {
-      console.log(`  ${key}: ${value ? "SET" : "NOT SET"}`)
-    })
-
-    // Get the first available credential
-    const clientId = Object.values(clientIdOptions)
-      .find((v) => v)
-      ?.trim()
-    const clientSecret = Object.values(clientSecretOptions)
-      .find((v) => v)
-      ?.trim()
-
     if (!clientId || !clientSecret) {
-      console.error("[v0] PayPal credentials not configured")
       return NextResponse.json(
-        {
-          error:
-            "PayPal credentials not found in environment variables. Please add them with one of these names: PAYPAL_CLIENT_ID, client_ID",
-        },
-        { status: 500 },
+        { error: "PayPal credentials not provided. Please configure them in the Profile settings." },
+        { status: 400 },
       )
     }
 
-    console.log("[v0] Using Client ID:", clientId.substring(0, 20) + "...")
-    console.log("[v0] Using Client Secret:", clientSecret.substring(0, 10) + "...")
-
-    const isSandbox = clientId.includes("sandbox") || clientId.startsWith("AZa") || clientId.startsWith("Aca")
-    const baseUrl = isSandbox ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com"
+    const paypalClientId = clientId.trim()
+    const paypalClientSecret = clientSecret.trim()
 
     console.log("[v0] ===== PayPal Instant Payout =====")
-    console.log("[v0] Environment:", isSandbox ? "SANDBOX" : "LIVE")
-    console.log("[v0] Base URL:", baseUrl)
+    console.log("[v0] Client ID starts with:", paypalClientId.substring(0, 15))
     console.log("[v0] Amount:", amount, "GBP")
     console.log("[v0] Recipient:", paypalEmail)
 
-    const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64")
-    console.log("[v0] Auth header length:", auth.length)
+    const isSandbox = paypalClientId.startsWith("AZa") || paypalClientId.startsWith("Aca")
+    const baseUrl = isSandbox ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com"
 
+    console.log("[v0] Environment:", isSandbox ? "SANDBOX" : "LIVE")
+    console.log("[v0] Base URL:", baseUrl)
+
+    const auth = Buffer.from(`${paypalClientId}:${paypalClientSecret}`).toString("base64")
+
+    // Step 1: Get access token
     const tokenResponse = await fetch(`${baseUrl}/v1/oauth2/token`, {
       method: "POST",
       headers: {
@@ -80,16 +46,14 @@ export async function POST(request: Request) {
 
     const tokenText = await tokenResponse.text()
     console.log("[v0] Token response status:", tokenResponse.status)
-    console.log("[v0] Token response:", tokenText.substring(0, 200))
 
     if (!tokenResponse.ok) {
       console.error("[v0] ❌ PayPal authentication failed")
+      console.error("[v0] Response:", tokenText)
       return NextResponse.json(
         {
-          error: "PayPal authentication failed",
-          details:
-            "Please verify:\n1. Your credentials are REST API credentials (not NVP/SOAP)\n2. Client ID and Secret are correct\n3. No extra spaces in the credentials\n4. Credentials match the environment (Live/Sandbox)",
-          response: tokenText,
+          error: "PayPal authentication failed. Please verify your Client ID and Client Secret are correct.",
+          details: tokenText,
         },
         { status: 401 },
       )
@@ -98,8 +62,9 @@ export async function POST(request: Request) {
     const tokenData = JSON.parse(tokenText)
     console.log("[v0] ✓ Successfully authenticated with PayPal")
 
+    // Step 2: Create payout
+    const batchId = `batch_${Date.now()}_${Math.random().toString(36).substring(7)}`
     const requestId = `payout_${Date.now()}_${Math.random().toString(36).substring(7)}`
-    const batchId = `batch_${Date.now()}`
 
     const payoutBody = {
       sender_batch_header: {
@@ -121,7 +86,7 @@ export async function POST(request: Request) {
       ],
     }
 
-    console.log("[v0] Sending instant payout request...")
+    console.log("[v0] Sending payout request...")
 
     const payoutResponse = await fetch(`${baseUrl}/v1/payments/payouts`, {
       method: "POST",
@@ -133,14 +98,15 @@ export async function POST(request: Request) {
       body: JSON.stringify(payoutBody),
     })
 
-    const responseText = await payoutResponse.text()
+    const payoutText = await payoutResponse.text()
+    console.log("[v0] Payout response status:", payoutResponse.status)
 
     if (!payoutResponse.ok) {
       let errorData
       try {
-        errorData = JSON.parse(responseText)
+        errorData = JSON.parse(payoutText)
       } catch {
-        errorData = { message: responseText }
+        errorData = { message: payoutText }
       }
 
       console.error("[v0] ❌ Payout failed:", errorData)
@@ -148,9 +114,9 @@ export async function POST(request: Request) {
       if (errorData.name === "AUTHORIZATION_ERROR" || payoutResponse.status === 403) {
         return NextResponse.json(
           {
-            error: "PayPal Payouts not enabled",
+            error: "PayPal Payouts not enabled for your account.",
             details:
-              "Please enable Payouts in your PayPal app:\n1. Go to developer.paypal.com\n2. Select 'My Apps & Credentials'\n3. Choose your app under 'Live' tab\n4. Enable 'Payouts' checkbox\n5. Save changes",
+              "Please enable Payouts:\n1. Go to developer.paypal.com\n2. My Apps & Credentials\n3. Select your LIVE app\n4. Enable 'Payouts' checkbox\n5. Save",
             debugId: errorData.debug_id,
           },
           { status: 403 },
@@ -160,15 +126,15 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: errorData.message || "Payout failed",
-          details: errorData.details || "Unknown error occurred",
+          details: errorData.details || payoutText,
           debugId: errorData.debug_id,
         },
         { status: payoutResponse.status },
       )
     }
 
-    const payoutData = JSON.parse(responseText)
-    console.log("[v0] ✓ Instant payout successful!")
+    const payoutData = JSON.parse(payoutText)
+    console.log("[v0] ✓ Payout successful!")
     console.log("[v0] Batch ID:", payoutData.batch_header?.payout_batch_id)
     console.log("[v0] Status:", payoutData.batch_header?.batch_status)
 
@@ -176,7 +142,7 @@ export async function POST(request: Request) {
       success: true,
       batchId: payoutData.batch_header?.payout_batch_id,
       status: payoutData.batch_header?.batch_status,
-      message: `£${amount} sent instantly to ${paypalEmail}`,
+      message: `£${amount} sent to ${paypalEmail}`,
     })
   } catch (error) {
     console.error("[v0] ❌ Unexpected error:", error)
